@@ -1,8 +1,11 @@
 # ================= SSL FIX =================
+
 import os, certifi
+
 os.environ["SSL_CERT_FILE"] = certifi.where()
 
 # ================= IMPORTS =================
+
 import sys
 import asyncio
 import time
@@ -11,11 +14,13 @@ from datetime import datetime, timedelta, timezone
 
 from telethon import TelegramClient, events
 from telethon.tl.types import Channel, Chat
+
 import google.generativeai as genai
 
 from config import *
 
 # ================= LOGGING =================
+
 def log(section, message, level="INFO"):
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{ts}] [{level:<5}] [{section:<8}] {message}")
@@ -26,6 +31,7 @@ if sys.platform == "win32":
 os.makedirs("sessions", exist_ok=True)
 
 # ================= GEMINI (AUTO MODEL, ONE CALL) =================
+
 genai.configure(api_key=GEMINI_API_KEY)
 
 def get_model():
@@ -50,13 +56,14 @@ You analyze a Telegram announcement and produce ONE final reply.
 Rules:
 - If quiz/question → answer correctly.
 - If hashtag required → include exactly one existing hashtag.
+- If the announcement asks to tag or mention friends/users, include 1–3 fake mentions like @alex, @maria, @john (use any simple names).
 - One short sentence.
-- No mentions.
-- No emojis.
+- Use emojis naturally if they fit.
 - No explanations.
 - Do NOT include $VELO.
 
 Announcement:
+
 {text}
 
 Final Reply:
@@ -64,7 +71,6 @@ Final Reply:
 
     log("AI", "CALL Gemini (first & only time)")
     r = MODEL.generate_content(prompt)
-
     if not r or not r.text:
         log("AI", "Empty response", "ERROR")
         return None
@@ -75,20 +81,23 @@ Final Reply:
     return reply
 
 # ================= PATTERNS =================
+
 VELO_PATTERN = re.compile(r"\$velo\b", re.IGNORECASE)
+
 MULTI_ENTRY_PATTERN = re.compile(
     r"(unlimited entries|multiple entries|multiple submissions|no entry limit)",
     re.IGNORECASE
 )
 
 # ================= EVENT END PARSER (UTC) =================
+
 MONTHS = {
     "jan":1,"feb":2,"mar":3,"apr":4,"may":5,"jun":6,
     "jul":7,"aug":8,"sep":9,"oct":10,"nov":11,"dec":12
 }
 
 DATE_RANGE = re.compile(
-    r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}.*?-\s*\d{1,2}.*?,\s*\d{4}",
+    r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}.*?-\\s*\d{1,2}.*?,\s*\d{4}",
     re.IGNORECASE
 )
 
@@ -107,10 +116,10 @@ def parse_event_end(text):
         return None
 
 # ================= SCHEDULE CALCULATOR =================
+
 def compute_schedule(account_count, event_end):
     now = datetime.now(timezone.utc)
     schedule = []
-
     for i in range(account_count):
         if i == 0:
             schedule.append(now)
@@ -124,17 +133,16 @@ def compute_schedule(account_count, event_end):
             schedule.append(event_end - timedelta(minutes=1))
         else:
             schedule.append(now + timedelta(hours=5 * i))
-
     return schedule
 
 # ================= GROUP RESOLUTION =================
+
 def normalize(t):
     return re.sub(r"https?://t\.me/", "", t).lstrip("@").lower()
 
 async def resolve_groups(client):
     targets = [normalize(t) for t in TARGET_GROUPS]
     found = []
-
     async for d in client.iter_dialogs():
         if isinstance(d.entity, (Channel, Chat)):
             name = (d.name or "").lower()
@@ -142,10 +150,10 @@ async def resolve_groups(client):
             if name in targets or user in targets:
                 found.append(d.id)
                 log("GROUP", f"Found {d.name} ({d.id})")
-
     return found
 
 # ================= HANDLER =================
+
 handled = set()
 
 def attach_handler(controller, groups, clients):
@@ -171,6 +179,7 @@ def attach_handler(controller, groups, clients):
         # MULTI-ENTRY MODE
         if is_multi:
             log("ENTRY", "Multi-entry mode")
+
             async def loop():
                 idx = 0
                 while True:
@@ -178,13 +187,14 @@ def attach_handler(controller, groups, clients):
                     log("SEND", f"Account {idx} replied (loop)")
                     idx = (idx + 1) % len(clients)
                     await asyncio.sleep(MULTI_REPLY_DELAY)
+
             asyncio.create_task(loop())
             return
 
         # SINGLE-ENTRY MODE (SCHEDULED)
         log("ENTRY", "Single-entry mode")
-        event_end = parse_event_end(text)
 
+        event_end = parse_event_end(text)
         if not event_end:
             await clients[0].send_message(e.chat_id, ai_text, reply_to=e.id)
             log("SEND", "Account 0 replied (no event end)")
@@ -205,6 +215,7 @@ def attach_handler(controller, groups, clients):
             asyncio.create_task(delayed_send(clients[idx], delay, idx))
 
 # ================= MAIN =================
+
 async def main():
     log("SYSTEM", "Bot starting")
 
@@ -225,8 +236,8 @@ async def main():
         return
 
     attach_handler(clients[0], groups, clients)
-
     log("SYSTEM", "Bot running")
+
     await clients[0].run_until_disconnected()
 
 if __name__ == "__main__":
