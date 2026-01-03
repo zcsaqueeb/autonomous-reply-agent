@@ -43,7 +43,7 @@ RESPONSE_DELAY = 1   # seconds
 # Number of Telegram user accounts to login via QR
 # Example: 2, 3, 4, 5 ...
 ACCOUNT_COUNT = 2
-MULTI_REPLY_DELAY = 3  # seconds between replies in multi-entry mode
+MULTI_REPLY_DELAY = 30  # seconds between replies in multi-entry mode
 
 
 # =========================
