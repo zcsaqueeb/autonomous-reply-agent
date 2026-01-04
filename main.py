@@ -30,6 +30,15 @@ if sys.platform == "win32":
 
 os.makedirs("sessions", exist_ok=True)
 
+# ================= GLOBAL COUNTERS =================
+
+TOTAL_REPLIES_SENT = 0  # global counter
+
+def inc_reply_counter():
+    global TOTAL_REPLIES_SENT
+    TOTAL_REPLIES_SENT += 1
+    return TOTAL_REPLIES_SENT
+
 # ================= GEMINI (AUTO MODEL, ONE CALL) =================
 
 genai.configure(api_key=GEMINI_API_KEY)
@@ -54,11 +63,12 @@ async def ai_reply_once(msg_id: int, text: str):
 You analyze a Telegram announcement and produce ONE final reply.
 
 Rules:
-- If quiz/question → answer correctly.
+- Reply with ONLY what is required by the announcement (answer, hashtag, tags), nothing extra.
+- If quiz/question → return ONLY the correct option/answer text (no full sentence).
 - If hashtag required → include exactly one existing hashtag.
 - If the announcement asks to tag or mention friends/users, include 1–3 fake mentions like @alex, @maria, @john (use any simple names).
-- One short sentence.
-- Use emojis naturally if they fit.
+- Do NOT write a full sentence. Keep it as short as possible (just answer/hashtag/tags).
+- Use emojis only if they clearly fit in this short reply.
 - No explanations.
 - Do NOT include $VELO.
 
@@ -66,7 +76,7 @@ Announcement:
 
 {text}
 
-Final Reply:
+Final Reply (only the message to send, no quotes or extra text):
 """.strip()
 
     log("AI", "CALL Gemini (first & only time)")
@@ -184,7 +194,8 @@ def attach_handler(controller, groups, clients):
                 idx = 0
                 while True:
                     await clients[idx].send_message(e.chat_id, ai_text, reply_to=e.id)
-                    log("SEND", f"Account {idx} replied (loop)")
+                    count = inc_reply_counter()
+                    log("SEND", f"Account {idx} replied (loop) | Total sent: {count}")
                     idx = (idx + 1) % len(clients)
                     await asyncio.sleep(MULTI_REPLY_DELAY)
 
@@ -197,7 +208,8 @@ def attach_handler(controller, groups, clients):
         event_end = parse_event_end(text)
         if not event_end:
             await clients[0].send_message(e.chat_id, ai_text, reply_to=e.id)
-            log("SEND", "Account 0 replied (no event end)")
+            count = inc_reply_counter()
+            log("SEND", f"Account 0 replied (no event end) | Total sent: {count}")
             return
 
         schedule = compute_schedule(len(clients), event_end)
@@ -210,7 +222,8 @@ def attach_handler(controller, groups, clients):
             async def delayed_send(c, d, i):
                 await asyncio.sleep(d)
                 await c.send_message(e.chat_id, ai_text, reply_to=e.id)
-                log("SEND", f"Account {i} replied (scheduled)")
+                count = inc_reply_counter()
+                log("SEND", f"Account {i} replied (scheduled) | Total sent: {count}")
 
             asyncio.create_task(delayed_send(clients[idx], delay, idx))
 
